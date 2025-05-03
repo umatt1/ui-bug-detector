@@ -25,11 +25,13 @@ class InteractionAgent(BaseAgent):
         
     def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Interact with the page using Selenium"""
-        if not self.driver:
-            self.setup_driver()
-            
         try:
+            if not self.driver:
+                self.logger.info("Setting up Selenium driver...")
+                self.setup_driver()
+                
             url = state.get("current_url")
+            self.logger.info(f"Navigating to URL: {url}")
             self.driver.get(url)
             
             # Record initial state
@@ -38,11 +40,13 @@ class InteractionAgent(BaseAgent):
             # Click buttons
             for button in state.get("buttons", []):
                 try:
+                    self.logger.info(f"Attempting to click button: {button.text}")
                     element = WebDriverWait(self.driver, 5).until(
                         EC.element_to_be_clickable((By.XPATH, f"//button[contains(text(), '{button.text}')]"))
                     )
                     element.click()
                     actions.append({"type": "click", "element": button.text})
+                    self.logger.info(f"Successfully clicked button: {button.text}")
                 except Exception as e:
                     self.logger.warning(f"Could not click button {button.text}: {str(e)}")
             
@@ -52,6 +56,7 @@ class InteractionAgent(BaseAgent):
                     inputs = form.find_all("input")
                     for input_field in inputs:
                         if input_field.get("type") != "submit":
+                            self.logger.info(f"Attempting to fill input: {input_field.get('name')}")
                             element = self.driver.find_element(By.NAME, input_field.get("name"))
                             element.send_keys("test_data")
                             actions.append({
@@ -59,10 +64,15 @@ class InteractionAgent(BaseAgent):
                                 "element": input_field.get("name"),
                                 "value": "test_data"
                             })
+                            self.logger.info(f"Successfully filled input: {input_field.get('name')}")
                 except Exception as e:
                     self.logger.warning(f"Could not fill form: {str(e)}")
             
+            # Add driver to state
+            state["driver"] = self.driver
             state["actions"] = actions
+            
+            self.logger.info(f"Completed {len(actions)} interactions")
             return state
             
         except Exception as e:
@@ -73,4 +83,8 @@ class InteractionAgent(BaseAgent):
     def __del__(self):
         """Clean up Selenium driver"""
         if self.driver:
-            self.driver.quit() 
+            try:
+                self.driver.quit()
+                self.logger.info("Selenium driver closed successfully")
+            except Exception as e:
+                self.logger.error(f"Error closing Selenium driver: {str(e)}") 
